@@ -173,21 +173,6 @@ A small overlay shows while spectating with a `[X] Stop` hint.
 
 ---
 
-## Building the UI from source (optional)
-
-You only need this if you want to customise the panel. The pre-built bundle in `web/` is committed and works out of the box.
-
-Requirements: [Bun](https://bun.sh) >= 1.0, Node >= 20.
-
-```bash
-cd ui-src
-bun install
-bun run dev        # local dev server, uses mock data
-bun run build      # produces ../web/assets/*
-```
-
----
-
 ## Troubleshooting
 
 | Symptom | Fix |
