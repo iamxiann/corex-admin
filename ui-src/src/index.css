@@ -1,0 +1,98 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Geist", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SF Mono", Consolas, monospace;
+
+  /* base — near-black with slight warm undertone */
+  --color-base: #0e0e11;
+  --color-surface: #121214;
+  --color-surface-2: #18181b;
+  --color-surface-3: #2c2c33;
+
+  /* borders */
+  --color-line: #232327;
+  --color-line-strong: #3a3a42;
+
+  /* text hierarchy */
+  --color-fg: #f4f4f5;
+  --color-fg-muted: #a1a1aa;
+  --color-fg-subtle: #71717a;
+  --color-fg-faint: #52525b;
+
+  /* semantic accents — muted, not neon */
+  --color-online: #34d399;       /* emerald-400 */
+  --color-online-bg: #052e22;
+  --color-warn: #f59e0b;         /* amber-500 */
+  --color-warn-bg: #2a1d05;
+  --color-danger: #f43f5e;       /* rose-500 */
+  --color-danger-bg: #2a0a13;
+  --color-info: #60a5fa;         /* blue-400 — used only for system info */
+}
+
+@layer base {
+  *, *::before, *::after {
+    border-color: var(--color-line);
+  }
+  /* CRITICAL for NUI: html/body MUST be transparent so the game stays visible
+     behind the panel. Only the inner window in App.tsx gets a background. */
+  html, body, #root {
+    height: 100%;
+    background: transparent !important;
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    margin: 0;
+    font-feature-settings: "cv11", "ss01", "ss03";
+    letter-spacing: -0.005em;
+  }
+
+  /* Grain disabled — used to draw a faint overlay across the whole viewport
+     which covered the game when running inside NUI. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    display: none;
+    z-index: 0;
+    opacity: 0.025;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  }
+
+  ::selection {
+    background: rgba(244, 244, 245, 0.15);
+  }
+
+  /* Scrollbars are visually hidden across the whole panel — scrolling still
+     works via wheel/keyboard/touch, but the chrome doesn't compete with the
+     content. The compact admin window doesn't have the real estate to
+     surface scrollbars without looking cluttered. */
+  ::-webkit-scrollbar          { width: 0; height: 0; background: transparent; }
+  ::-webkit-scrollbar-track    { background: transparent; }
+  ::-webkit-scrollbar-thumb    { background: transparent; }
+  ::-webkit-scrollbar-corner   { background: transparent; }
+  * { scrollbar-width: none; -ms-overflow-style: none; }
+
+  button, input, select {
+    font-family: inherit;
+  }
+  input:focus, button:focus, [tabindex]:focus {
+    outline: none;
+  }
+}
+
+@layer utilities {
+  .tabular { font-variant-numeric: tabular-nums; }
+  .ring-soft {
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.04), 0 1px 0 0 rgba(255,255,255,0.02) inset;
+  }
+  .text-balance { text-wrap: balance; }
+  /* gentle 200ms transitions everywhere by default — no bounces */
+  .motion-soft { transition: all 180ms cubic-bezier(0.2, 0.4, 0.2, 1); }
+}
