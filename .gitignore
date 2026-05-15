@@ -1,0 +1,17 @@
+# Vite/Node build artefacts — the panel ships a pre-built /web bundle, so
+# /ui-src is source-only. Server owners install the resource without ever
+# touching Node.
+ui-src/node_modules
+ui-src/dist
+ui-src/.vite
+ui-src/*.tsbuildinfo
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.log
+.vscode/
+.idea/
+
+# Local config overrides — never commit personal Discord webhooks etc.
+config.local.lua

@@ -42,7 +42,6 @@ ui_page 'web/index.html'
 files {
     'web/index.html',
     'web/assets/*',
-    'web/items/*',
 }
 
 dependencies {

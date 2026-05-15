@@ -40,8 +40,10 @@ export function imageFor(item: Pick<Item, "id" | "image">): string | null {
   const filename = item.image || `${item.id}.png`;
   if (!filename) return null;
   if (IS_NUI) return INV_HOST + filename;
-  // Dev preview: bundled lowercase copies, see public/items/.
-  return `${import.meta.env.BASE_URL}items/${filename.toLowerCase()}`;
+  // Dev mode (browser preview): the cfx-nui-* protocol is CEF-only, so this
+  // path returns null and the caller falls back to the lucide category icon.
+  // We do NOT bundle item PNGs — corex-inventory owns the icon source.
+  return null;
 }
 
 export function categoryFallbackIcon(category: Item["category"]): typeof Crosshair {
