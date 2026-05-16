@@ -1,21 +1,5 @@
--- corex-admin · world snapshot aggregator
---
--- The Overview page wants four live numbers: total online players (handled
--- by api.lua), alive zombies, active red zones, and the current weather.
--- This file is the single integration point with the other corex resources
--- so api.lua stays clean.
---
--- All reads are best-effort — if a sibling resource is stopped or missing
--- an export, we return safe zeros rather than crashing the overview.
-
--- ----- ZOMBIES ------------------------------------------------------------
--- corex-zombies is client-authoritative (each client streams its own pool
--- of zombies). We collect per-client counts via a periodic broadcast and
--- aggregate here. Daily kills are tallied by a server event the client
--- fires on every kill.
-
-local clientZombieCounts = {}      -- src → number reported
-local lastReport         = {}      -- src → os.time() of last report
+local clientZombieCounts = {}
+local lastReport         = {}
 local killedToday        = 0
 local lastResetDate      = os.date('%Y-%m-%d')
 
@@ -40,23 +24,12 @@ RegisterNetEvent('corex-admin:server:reportZombieKill', function()
     rolloverIfNeeded()
     killedToday = killedToday + 1
 
-    -- Tally per-player lifetime kills in corex-core metadata so the panel
-    -- can show "ABUGIZA killed 1,420 zombies" in the HISTORY section. We
-    -- read-modify-write rather than incrementing a state-bag because metadata
-    -- persists to DB on logout/auto-save and survives restarts.
     local current = exports['corex-core']:GetMetaData(src, 'zombies_killed') or 0
     if type(current) ~= 'number' then current = tonumber(current) or 0 end
     exports['corex-core']:SetMetaData(src, 'zombies_killed', current + 1)
 end)
 
--- ----- LOCATION ----------------------------------------------------------
--- `GetStreetNameAtCoord` is a client-only native. The client periodically
--- resolves its own street/zone name and pushes it here; the admin panel
--- reads from this cache when building player summaries. Declared BEFORE
--- the playerDropped handler so its closure binds to this local (Lua's
--- top-down scoping would otherwise capture a nil global).
-
-local playerLocations = {}   -- src → street/zone label
+local playerLocations = {}
 
 RegisterNetEvent('corex-admin:server:reportLocation', function(label)
     local src = source
@@ -65,8 +38,6 @@ RegisterNetEvent('corex-admin:server:reportLocation', function(label)
     playerLocations[src] = label
 end)
 
----Returns the client-reported street/zone label, or nil if none has been
----received yet (e.g. the player just connected).
 ---@param src number
 ---@return string|nil
 function GetReportedLocation(src)
@@ -80,8 +51,6 @@ AddEventHandler('playerDropped', function()
     playerLocations[src] = nil
 end)
 
--- Sum live, recent reports. A stale report (>15s old) means that client
--- isn't running corex-zombies anymore — drop it from the total.
 local function ZombiesAlive()
     local total = 0
     local now = os.time()
@@ -93,8 +62,6 @@ local function ZombiesAlive()
     return total
 end
 
--- ----- RED ZONES ----------------------------------------------------------
-
 local function RedZonesSummary()
     if GetResourceState('corex-redzones') ~= 'started' then
         return { activeCount = 0, totalCount = 0, playersInside = 0 }
@@ -105,9 +72,6 @@ local function RedZonesSummary()
         return { activeCount = 0, totalCount = 0, playersInside = 0 }
     end
 
-    -- Count players actually inside any red zone by walking the players list
-    -- and asking the resource's exported tracker. We don't have a single
-    -- "total occupants" export, so this is the cleanest path.
     local inside = 0
     local players = exports['corex-core']:GetPlayers() or {}
     for src in pairs(players) do
@@ -117,19 +81,14 @@ local function RedZonesSummary()
 
     return {
         activeCount   = #manifest,
-        totalCount    = #manifest,   -- every config'd zone is "active" in this resource — there's no enable flag
+        totalCount    = #manifest,
         playersInside = inside,
     }
 end
 
--- corex-redzones doesn't export a per-player tracker, so we reach into it
--- via a tiny helper that re-uses its own coords check. Falls back to false
--- if the resource is missing — never crash the overview.
 function IsPlayerInRedZone(src)
     if GetResourceState('corex-redzones') ~= 'started' then return false end
-    -- Heuristic: pull the manifest once and test against each zone's coords.
-    -- The resource keeps its own tracker but doesn't export it; rather than
-    -- patching corex-redzones, we replicate the geometry test here.
+
     local ok, manifest = pcall(exports['corex-redzones'].GetZoneManifest, exports['corex-redzones'])
     if not ok or type(manifest) ~= 'table' then return false end
 
@@ -150,15 +109,11 @@ function IsPlayerInRedZone(src)
     return false
 end
 
--- Return the human-readable name of the red zone the player is currently in,
--- or nil if not in one. Used by the player drawer's "Zone" field.
 function GetPlayerRedZoneName(src)
     local inside, name = IsPlayerInRedZone(src)
     if inside then return name end
     return nil
 end
-
--- ----- WEATHER ------------------------------------------------------------
 
 local WEATHER_LABEL = {
     EXTRASUNNY  = 'Clear',     CLEAR       = 'Clear',
@@ -186,15 +141,11 @@ local function WeatherSummary()
     end
     return {
         current  = prettyWeather(current),
-        -- corex-weather chooses the next pattern at change time, so there's
-        -- no deterministic "next" before then. We show — to be honest rather
-        -- than guess.
+
         next     = '—',
         changeIn = '—',
     }
 end
-
--- ----- PUBLIC API --------------------------------------------------------
 
 function ApiGetWorldStats()
     return {
