@@ -1,39 +1,19 @@
--- corex-admin · session tracking
---
--- Two pieces of data the admin panel needs that aren't tracked anywhere
--- else in the framework:
---
---   1. `joinedAt`  → wall-clock timestamp the player JOINED this server
---                    (used to render "Joined 12m ago"). Persisted in
---                    corex-core metadata under `last_joined_at` so it
---                    survives reconnects.
---   2. `playtime`  → seconds played in the CURRENT session, derived live
---                    from joinedAt vs now.
---
--- Account creation date (the absolute "first ever join") lives in the
--- `players` table as `created_at`; we expose it via ApiGetAccountCreatedAt
--- for the rare admin who wants to see it.
-
 local META_JOINED_AT = 'last_joined_at'
 
-local sessionStart = {}    -- src → unix seconds when this session began
+local sessionStart = {}
 
 local function nowUnix() return os.time() end
 
 local function captureJoin(src)
     if type(src) ~= 'number' or src <= 0 then return end
     sessionStart[src] = nowUnix()
-    -- Mirror to metadata so the panel can read "joined Xm ago" even on a
-    -- cold restart that loses our in-memory table.
+
     local ok = pcall(exports['corex-core'].SetMetaData, exports['corex-core'], src, META_JOINED_AT, sessionStart[src])
     if not ok and COREX and COREX.Debug then
         COREX.Debug.Warn('[corex-admin] failed to persist join time for src ' .. src)
     end
 end
 
--- corex-core dispatches `corex:server:playerReady` once the player object
--- is fully loaded. That's the right moment to start the session clock —
--- it fires AFTER identifier resolution so we can safely write metadata.
 AddEventHandler('corex:server:playerReady', function(src)
     captureJoin(tonumber(src))
 end)
@@ -42,9 +22,6 @@ AddEventHandler('playerDropped', function()
     sessionStart[source] = nil
 end)
 
----Return the unix seconds when the player joined the current session.
----Falls back to persisted metadata if our in-memory table is empty (e.g.
----admin panel was restarted but players stayed connected).
 ---@param src number
 ---@return number
 function GetSessionStart(src)
@@ -54,13 +31,11 @@ function GetSessionStart(src)
         sessionStart[src] = saved
         return saved
     end
-    -- Last resort: this player slipped through both events. Use now() so we
-    -- at least get a sensible "just joined" instead of negative time.
+
     sessionStart[src] = nowUnix()
     return sessionStart[src]
 end
 
----Pretty short playtime label ("3h 12m" / "12m" / "42s").
 ---@param seconds number
 ---@return string
 function FormatPlaytime(seconds)
@@ -72,7 +47,6 @@ function FormatPlaytime(seconds)
     return ('%dh %dm'):format(hrs, mins % 60)
 end
 
----Pretty relative-time label ("3m ago", "1h ago", "just now").
 ---@param unixSeconds number
 ---@return string
 function FormatTimeAgo(unixSeconds)
@@ -85,7 +59,6 @@ function FormatTimeAgo(unixSeconds)
     return math.floor(diff / 86400) .. 'd ago'
 end
 
----Convenience for api.lua — returns both labels in one go.
 ---@param src number
 ---@return string playtimeLabel, string joinedAgoLabel
 function GetPlaytimeAndJoined(src)
