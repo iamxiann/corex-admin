@@ -1,18 +1,9 @@
--- corex-admin · read-only data fetchers
--- All exports here return JSON-friendly tables for the NUI. No mutations.
---
--- corex-core's player object (verified from server/players.lua) is:
---   { source, identifier, name, money={cash,bank}, metadata={...}, isBusy, ... }
--- Note: there is NO `PlayerData` wrapper. We read fields directly.
-
 local Corex
 
 CreateThread(function()
     while not exports['corex-core']:IsReady() do Wait(100) end
     Corex = exports['corex-core']:GetCoreObject()
 end)
-
--- ----- helpers -----------------------------------------------------------
 
 local function pingOf(src)
     return GetPlayerPing(src) or 0
@@ -31,9 +22,6 @@ local function vitalsFromMeta(meta)
     }
 end
 
--- corex-inventory item slot shape (verified from server/main.lua):
---   { name = "<id>", count = N, x, y, slot, metadata }
--- React expects: { itemId = "<id>", count = N }
 local function mapInventory(invObj)
     local out = {}
     if not invObj or type(invObj.items) ~= 'table' then return out end
@@ -43,8 +31,6 @@ local function mapInventory(invObj)
     return out
 end
 
--- Pull skill points if corex-skills is loaded — silently ignore otherwise so
--- servers that don't use the skills resource still get a clean panel.
 local function getSkillPoints(src)
     if GetResourceState('corex-skills') ~= 'started' then return 0 end
     local ok, pts = pcall(exports['corex-skills'].GetSkillPoints, exports['corex-skills'], src)
@@ -52,13 +38,7 @@ local function getSkillPoints(src)
     return pts
 end
 
--- Player zone — prefer a red zone name (more actionable for admins), then
--- fall back to corex-zones safe zone, then the client-reported street/zone
--- label. `GetStreetNameAtCoord` is a CLIENT-ONLY native, so we can't resolve
--- the street server-side directly; the client pushes its current label via
--- client/location_report.lua and we read it from the cache here.
 local function getZoneLabel(src)
-    -- Red zone takes priority — it's the higher-signal place to know about.
     local rzName = GetPlayerRedZoneName and GetPlayerRedZoneName(src)
     if rzName and rzName ~= '' then return ('Red zone · %s'):format(rzName) end
 
@@ -69,7 +49,6 @@ local function getZoneLabel(src)
         end
     end
 
-    -- Client-reported label (populated by location_report.lua every 5s).
     if GetReportedLocation then
         local reported = GetReportedLocation(src)
         if reported and reported ~= '' then return reported end
@@ -77,13 +56,8 @@ local function getZoneLabel(src)
     return 'Open world'
 end
 
--- corex-inventory uses an 8x10 grid by default (Config.GridWidth × GridHeight),
--- but server owners can change those. We read the live values so the panel
--- never lies about capacity.
 local function getInventoryGridSize()
     if GetResourceState('corex-inventory') ~= 'started' then return 24 end
-    -- corex-inventory keeps Config in shared scope, so reading from its
-    -- module table needs a tiny indirection: we expose a helper export.
     local ok, w = pcall(function() return exports['corex-inventory']:GetGridWidth() end)
     local ok2, h = pcall(function() return exports['corex-inventory']:GetGridHeight() end)
     local width  = (ok  and type(w) == 'number' and w > 0) and w or 8
@@ -91,11 +65,6 @@ local function getInventoryGridSize()
     return width * height
 end
 
--- Safely call a function and return its result, or the fallback on any
--- throw. Replaces the brittle outer-pcall pattern that used to drop a
--- player's entire summary to a placeholder if ANY sub-call failed —
--- previously a transient `getZoneLabel` error would also blank out
--- playtime / joined / skill points for the same render.
 local function tryCall(fn, fallback, ...)
     local ok, res = pcall(fn, ...)
     if ok then return res end
@@ -122,9 +91,6 @@ local function buildPlayerSummary(src, player, includeMugshot)
         pcall(function() RequestMugshot(src) end)
     end
 
-    -- Playtime + Joined are derived from a metadata key written on join.
-    -- If anything throws we still want sensible values shown — '—' is
-    -- worse than '0s' / 'just now', so we keep these tiny helpers.
     local playtime, joinedAgo = '0s', 'just now'
     pcall(function() playtime, joinedAgo = GetPlaytimeAndJoined(src) end)
 
@@ -152,8 +118,6 @@ local function buildPlayerSummary(src, player, includeMugshot)
     }
 end
 
--- ----- public API --------------------------------------------------------
-
 function ApiGetPlayers()
     if not Corex then return {} end
     local result = {}
@@ -162,20 +126,10 @@ function ApiGetPlayers()
     for src, p in pairs(players) do
         count = count + 1
         if count > Config.MaxPlayersPerFetch then break end
-        -- Defensive: if a single player's summary throws (e.g. their ped is
-        -- in a weird state mid-respawn), don't let it nuke the whole list —
-        -- previously a dead player whose ped was being recreated would
-        -- silently disappear from the panel because the iteration aborted.
         local ok, summary = pcall(buildPlayerSummary, tonumber(src), p, false)
         if ok and summary then
             result[#result + 1] = summary
         else
-            -- Last-resort placeholder so the player is still visible even if
-            -- some sub-fetch (zone, inventory) failed transiently.
-            -- IMPORTANT: pull the cached mugshot/metadata directly so the
-            -- avatar doesn't blink to initials when the wrapper trips. The
-            -- previous version set mugshot='' here which made the user's
-            -- portrait flicker every time getZoneLabel hiccuped.
             local n        = tonumber(src)
             local cachedMs = (GetCachedMugshot and GetCachedMugshot(n)) or ''
             local pmeta    = (p and type(p.metadata) == 'table') and p.metadata or {}
@@ -237,8 +191,6 @@ function ApiGetOverview()
         else loading = loading + 1 end
     end
 
-    -- World stats from sibling resources (see server/world.lua). Never
-    -- nil-out — the UI assumes the fields exist.
     local world = ApiGetWorldStats and ApiGetWorldStats() or {
         zombies  = { alive = 0, killedToday = 0, hordeNext = '—' },
         redzones = { activeCount = 0, totalCount = 0, playersInside = 0 },
@@ -256,9 +208,6 @@ function ApiGetOverview()
     }
 end
 
--- corex-inventory's items.lua doesn't declare a `category` field on every
--- item (only melee weapons do). We infer it from the id so the UI can pick
--- the right fallback icon when the image happens to be missing.
 local function inferCategory(id, raw)
     if type(raw) == 'string' and #raw > 0 then return raw end
     if not id then return 'other' end
