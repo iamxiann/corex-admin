@@ -4,6 +4,12 @@
 
 Part of the [COREX Framework](https://github.com/corex-zombies).
 
+## Preview
+
+[![Watch the demo](https://img.youtube.com/vi/voClH32XzMg/hqdefault.jpg)](https://youtu.be/voClH32XzMg)
+
+> Click the thumbnail to watch the panel walkthrough on YouTube.
+
 ---
 
 ## Features
