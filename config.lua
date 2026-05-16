@@ -43,7 +43,7 @@ Config.Command = 'admin'
 Config.Branding = {
     ServerName = 'CoreX Admin',  -- e.g. 'My Awesome Server'
     Tagline    = 'zombie',
-    Logo       = ',           -- e.g. 'https://example.com/logo.png'
+    Logo       = '',           -- e.g. 'https://example.com/logo.png'
     Monogram   = 'CX',          -- fallback when Logo is empty
 }
 
