@@ -1,12 +1,6 @@
--- corex-admin · server entry
--- Wires the NUI bridge: lib.callback names match the strings the React app
--- fetches via nuiFetch(...). Every callback re-checks IsAdmin.
-
 local function deny()
     return { ok = false, error = 'permission_denied' }
 end
-
--- ---------- Read-only callbacks ------------------------------------------
 
 lib.callback.register('corex-admin:players', function(source)
     if not IsAdmin(source) then return deny() end
@@ -37,8 +31,6 @@ lib.callback.register('corex-admin:actions.recent', function(source, limit)
     if not IsAdmin(source) then return deny() end
     return { ok = true, data = ActionLogList(limit) }
 end)
-
--- ---------- Mutation callbacks -------------------------------------------
 
 lib.callback.register('corex-admin:action.kick', function(source, target, reason)
     local ok, err = ActionKick(source, target, reason)
@@ -105,8 +97,6 @@ lib.callback.register('corex-admin:bans.extend', function(source, banId, addSeco
     return { ok = ok, error = err }
 end)
 
--- ---------- Reports ------------------------------------------------------
-
 lib.callback.register('corex-admin:reports.list', function(source, filter)
     if not IsAdmin(source) then return deny() end
     return { ok = true, data = ReportsList(filter) }
@@ -117,7 +107,6 @@ lib.callback.register('corex-admin:reports.count', function(source)
     return { ok = true, data = ReportsCount() }
 end)
 
--- Submission is open to all players — no IsAdmin gate.
 lib.callback.register('corex-admin:reports.submit', function(source, category, description)
     local id, err = ReportsSubmit(source, category, description)
     return { ok = id and true or false, error = err, data = id }
@@ -128,26 +117,16 @@ lib.callback.register('corex-admin:reports.resolve', function(source, reportId, 
     return { ok = ok, error = err }
 end)
 
--- ---------- Open gate ----------------------------------------------------
-
--- The client asks "am I allowed?" before drawing the NUI to avoid opening a
--- shell the player can't use. This is a non-mutating check; the real gate is
--- on every callback above.
 lib.callback.register('corex-admin:canOpen', function(source)
     local allowed = IsAdmin(source)
     return { ok = allowed }
 end)
 
--- "Who am I?" — returns the calling admin's display profile so the sidebar
--- can show the real player's name + mugshot instead of a hard-coded label.
--- Admins are humans; seeing a stranger's name in the footer was confusing.
 lib.callback.register('corex-admin:me', function(source)
     if not IsAdmin(source) then return { ok = false, error = 'permission_denied' } end
     local player = exports['corex-core']:GetPlayer(source)
     local name = (player and player.name) or GetPlayerName(source) or 'Admin'
     local mugshot = GetCachedMugshot(source) or ''
-    -- Rank label is derived from the ACE that granted access; falls back to a
-    -- generic "Staff" when only the metadata flag is set.
     local rank = 'Staff'
     if IsPlayerAceAllowed(source, 'corex.admin')   then rank = 'Admin'      end
     if IsPlayerAceAllowed(source, 'command.admin') then rank = 'Head Admin' end
@@ -158,8 +137,6 @@ lib.callback.register('corex-admin:me', function(source)
             name     = name,
             mugshot  = mugshot,
             rank     = rank,
-            -- Server branding so the sidebar header can render the owner's
-            -- chosen name + logo without a second roundtrip.
             branding = {
                 serverName = (Config.Branding and Config.Branding.ServerName) or 'CoreX',
                 tagline    = (Config.Branding and Config.Branding.Tagline)    or '',
