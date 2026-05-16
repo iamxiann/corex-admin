@@ -1,7 +1,3 @@
--- corex-admin · permissions
--- Single source of truth for "can this source open the panel and run actions?"
--- Used by main.lua (gate) and actions.lua (re-check before every mutation).
-
 local Corex
 
 CreateThread(function()
@@ -33,7 +29,6 @@ function IsAdmin(src)
     return false, 'denied'
 end
 
----Resolve a display name + identifier for the actor (used in audit logs / bans table)
 ---@param src number
 ---@return string name, string identifier
 function GetActor(src)
