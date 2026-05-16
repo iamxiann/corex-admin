@@ -1,7 +1,3 @@
--- corex-admin · bans (oxmysql)
--- Owns the `corex_bans` table: list/create/lift/extend, plus the connect filter
--- that drops players whose identifier has an active ban.
-
 local DURATION_SECONDS = Config.BanDurations or {}
 
 local function durationToExpires(duration)
@@ -10,8 +6,6 @@ local function durationToExpires(duration)
     return os.date('!%Y-%m-%d %H:%M:%S', os.time() + sec)
 end
 
--- Auto-create the table on resource start so first-time installers don't need to
--- copy/paste SQL. Idempotent.
 CreateThread(function()
     if GetResourceState('oxmysql') ~= 'started' then
         print('^1[corex-admin]^7 oxmysql is not started — bans will not work.')
@@ -39,14 +33,12 @@ CreateThread(function()
     ]])
 end)
 
----List bans, newest first. Filter is 'active'|'expired'|'lifted'|'all'.
 function BansList(filter)
     filter = filter or 'active'
     local where = filter == 'all' and '' or 'WHERE status = ?'
     local args  = filter == 'all' and {}  or { filter }
     local rows = MySQL.query.await(('SELECT * FROM corex_bans %s ORDER BY banned_at DESC LIMIT 250'):format(where), args) or {}
 
-    -- Auto-mark expired bans without waiting for a cron job
     local now = os.time()
     for _, row in ipairs(rows) do
         if row.status == 'active' and row.expires_at then
@@ -60,14 +52,13 @@ function BansList(filter)
     return rows
 end
 
----Create a ban + kick the player if online. Returns the new row id.
 function BansCreate(actorSrc, targetSrc, duration, reason)
     if not IsAdmin(actorSrc) then return nil, 'permission_denied' end
     targetSrc = tonumber(targetSrc); if not targetSrc then return nil, 'bad_target' end
 
     local player = exports['corex-core']:GetPlayer(targetSrc)
     if not player then return nil, 'target_offline' end
-    -- corex-core player object is flat (no PlayerData wrapper)
+
     local pName = player.name or GetPlayerName(targetSrc) or '?'
     local pIdent = player.identifier or '?'
     local actorName, actorIdent = GetActor(actorSrc)
@@ -86,7 +77,6 @@ function BansCreate(actorSrc, targetSrc, duration, reason)
         expiresAt,
     })
 
-    -- Capture evidence BEFORE the player is dropped (after = no client to ask).
     local shot
     if Config.LogToDiscord and Config.DiscordWebhook ~= '' and Config.CaptureEvidenceScreenshots then
         shot = CaptureScreenshotBytes(targetSrc)
@@ -109,7 +99,6 @@ function BansCreate(actorSrc, targetSrc, duration, reason)
     return id
 end
 
----Lift an active ban by id. Returns true on success.
 function BansLift(actorSrc, banId)
     if not IsAdmin(actorSrc) then return false, 'permission_denied' end
     banId = tonumber(banId); if not banId then return false, 'bad_id' end
@@ -122,7 +111,6 @@ function BansLift(actorSrc, banId)
     return affected and affected > 0
 end
 
----Extend an active ban by N seconds. Returns true on success.
 function BansExtend(actorSrc, banId, addSeconds)
     if not IsAdmin(actorSrc) then return false, 'permission_denied' end
     banId = tonumber(banId); addSeconds = tonumber(addSeconds)
@@ -141,7 +129,6 @@ function BansExtend(actorSrc, banId, addSeconds)
     return affected and affected > 0
 end
 
--- ---------- Connect filter: block banned identifiers ----------------------
 
 AddEventHandler('playerConnecting', function(_, setKickReason, deferrals)
     deferrals.defer()
