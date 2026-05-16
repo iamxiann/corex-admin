@@ -1,25 +1,5 @@
--- corex-admin · screenshot + Discord pipeline
---
--- Two responsibilities:
---   1. CaptureScreenshotBytes : asks screenshot-basic to take a JPEG of the
---      target player and returns raw bytes (or nil on failure / timeout).
---   2. PostActionToDiscord    : posts a clean, human-readable embed to the
---      configured webhook. Attaches the screenshot if we have one.
---
--- The embed format is intentionally minimal — three labelled lines that read
--- naturally ("Mohammed warned ABUGIZA · cheating in safe zone") rather than
--- the old JSON dump that needed a programmer to parse.
---
--- Reliability rule: if the screenshot upload fails, the embed STILL gets
--- posted (without the image). A 400 from a bad multipart body must not
--- swallow the action log — admins need the audit trail even when CEF
--- can't produce a valid JPEG.
+local SCREENSHOT_TIMEOUT = 10
 
-local SCREENSHOT_TIMEOUT = 10   -- screenshot-basic + slow upload can take a beat
-
----Take a screenshot of `targetSrc` and return raw JPEG bytes (or nil).
----Synchronous from the caller's perspective; uses a Promise to bridge the
----screenshot-basic callback.
 ---@param targetSrc number
 ---@return string|nil bytes
 function CaptureScreenshotBytes(targetSrc)
@@ -36,10 +16,9 @@ function CaptureScreenshotBytes(targetSrc)
     local resolved = false
     local function safeResolve(v) if not resolved then resolved = true; p:resolve(v) end end
 
-    -- screenshot-basic returns a data URI: "data:image/jpg;base64,<b64>"
     exports['screenshot-basic']:requestClientScreenshot(targetSrc, {
         encoding = 'jpg',
-        quality  = 0.7,   -- ~80–200 KB JPEG, enough detail for moderation use
+        quality  = 0.7,
     }, function(err, dataUri)
         if err then
             print('^3[corex-admin]^7 screenshot-basic returned error: ' .. tostring(err))
@@ -49,15 +28,13 @@ function CaptureScreenshotBytes(targetSrc)
             safeResolve(nil); return
         end
         local _, _, b64 = dataUri:find('^data:image/[^;]+;base64,(.+)$')
-        if not b64 then b64 = dataUri end       -- some builds return raw b64
+        if not b64 then b64 = dataUri end
         local decoded = DecodeBase64(b64)
         if not decoded or #decoded < 200 then
             print('^3[corex-admin]^7 screenshot decode failed or empty (size=' .. tostring(decoded and #decoded or 0) .. ')')
             safeResolve(nil); return
         end
-        -- Sanity: a valid JPEG starts with FF D8 FF. If those magic bytes are
-        -- missing we have corrupted output — Discord would 400 on it. Better
-        -- to skip the attachment than to fail the whole embed post.
+
         if decoded:sub(1, 3) ~= '\xFF\xD8\xFF' then
             print('^3[corex-admin]^7 screenshot bytes are not a valid JPEG (skipping attachment)')
             safeResolve(nil); return
@@ -69,9 +46,6 @@ function CaptureScreenshotBytes(targetSrc)
     return Citizen.Await(p)
 end
 
--- ----- Base64 decoder (vendored — keeps this file self-contained) ---------
--- Standard base64 with padding. Allocation-light: one table append per
--- decoded byte rather than string concatenation.
 local B64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
 local B64_INDEX = {}
 for i = 1, #B64_ALPHABET do B64_INDEX[B64_ALPHABET:sub(i,i)] = i - 1 end
@@ -98,10 +72,6 @@ function DecodeBase64(input)
     return table.concat(out)
 end
 
--- ----- Embed shaping -----------------------------------------------------
-
--- Human-friendly verb per action — keeps the embed title readable. Mirrors
--- the React-side `recentActions` icon map.
 local ACTION_TITLE = {
     kick        = { verb = 'Kick',        color = 0xF59E0B },
     ban         = { verb = 'Ban',         color = 0xEF4444 },
@@ -116,8 +86,6 @@ local ACTION_TITLE = {
     announce    = { verb = 'Announce',    color = 0x60A5FA },
 }
 
--- Discord rejects empty field values with a 400 ("Must be 1+ chars"). Use
--- this everywhere we build a `value` so the embed always posts.
 local function safe(v, fallback)
     if v == nil then return fallback or '—' end
     local s = tostring(v)
@@ -200,9 +168,6 @@ local function buildEmbed(action, actorName, targetName, payload, ok, hasImage)
     return embed
 end
 
----Post an action to Discord with an attached screenshot.
----Falls back to a plain (no-image) post if screenshotBytes is nil OR the
----multipart upload returns a non-2xx.
 ---@param action string
 ---@param actorName string
 ---@param targetName string
@@ -212,8 +177,6 @@ end
 function PostActionToDiscord(action, actorName, targetName, payload, ok, screenshotBytes)
     if not Config.LogToDiscord or Config.DiscordWebhook == '' then return end
 
-    -- Plain JSON post — always works as a fallback, never depends on
-    -- multipart, never depends on a valid screenshot.
     local function postPlain()
         local embed = buildEmbed(action, actorName, targetName, payload, ok, false)
         local body = json.encode({
@@ -232,8 +195,6 @@ function PostActionToDiscord(action, actorName, targetName, payload, ok, screens
         return
     end
 
-    -- Multipart with screenshot attached. If Discord 400s we still want the
-    -- audit trail, so on failure we re-post a plain embed.
     local embed = buildEmbed(action, actorName, targetName, payload, ok, true)
     local payloadJson = json.encode({
         username = Config.DiscordWebhookName,
@@ -259,7 +220,7 @@ function PostActionToDiscord(action, actorName, targetName, payload, ok, screens
             tostring(status),
             tostring(responseBody and responseBody:sub(1, 200) or '')
         ))
-        -- Salvage the audit log — retry without the image attachment.
+
         postPlain()
     end, 'POST', body, {
         ['Content-Type'] = 'multipart/form-data; boundary=' .. boundary,
