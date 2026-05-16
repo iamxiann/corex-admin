@@ -1,13 +1,3 @@
--- corex-admin · persistent admin action log
---
--- Every mutation (kick, ban, warn, give_money, set_money, give_item,
--- remove_item, revive, teleport, spectate, announce, weather) is mirrored
--- into the `corex_admin_actions` table. The Overview page reads the most
--- recent rows so admins can see what just happened across the staff team.
---
--- Schema kept intentionally narrow — the existing Discord webhook still
--- holds the long-form audit trail. This table only feeds the in-game UI.
-
 local TABLE_NAME = 'corex_admin_actions'
 
 CreateThread(function()
@@ -34,8 +24,6 @@ CreateThread(function()
     ]])
 end)
 
--- Format a short detail string from the action's payload. Keeps the UI
--- readable without dumping full JSON. Empty payload → empty string.
 local function formatDetail(action, payload)
     if type(payload) ~= 'table' then return '' end
     if action == 'give_money' or action == 'set_money' then
@@ -78,9 +66,6 @@ local function targetDisplay(targetSrc)
     return name, ident
 end
 
----Append a row to the action log. Called from actions.lua after each
----successful mutation. Failures are swallowed — logging must NEVER block
----the actual admin action.
 ---@param actorSrc number
 ---@param actorName string
 ---@param action string
@@ -94,14 +79,12 @@ function AppendActionLog(actorSrc, actorName, action, payload, targetSrc)
     local tName, tIdent = targetDisplay(targetSrc or (type(payload) == 'table' and payload.target))
     local detail = formatDetail(action, payload)
 
-    -- Fire-and-forget insert: don't block the action thread on the DB write.
     MySQL.insert(
         ('INSERT INTO %s (actor_id, actor_name, actor_src, action, target_src, target_name, target_id, detail) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'):format(TABLE_NAME),
         { actorIdent, actorName or '?', actorSrc, action, targetSrc, tName, tIdent, detail }
     )
 end
 
----Return the most recent N rows as JSON-friendly tables.
 ---@param limit number?
 ---@return table
 function ActionLogList(limit)
@@ -117,8 +100,6 @@ function ActionLogList(limit)
 
     local out = {}
     for i, row in ipairs(rows) do
-        -- Convert MySQL timestamp → ISO 8601 so the React `timeAgo` helper
-        -- (which uses `new Date(iso)`) parses correctly across browsers.
         local createdIso = row.created_at
         if type(createdIso) == 'string' then
             createdIso = createdIso:gsub(' ', 'T')
