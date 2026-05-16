@@ -1,5 +1,3 @@
--- corex-admin · reports
-
 local REPORT_CATEGORIES = {
     cheating = true, harassment = true, rdm = true, bug = true, other = true,
 }
@@ -28,9 +26,6 @@ CreateThread(function()
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     ]])
 end)
-
--- Explicit global assignment via _G so any lua54 strict-globals config can't
--- accidentally swallow the definitions. server/main.lua expects these names.
 
 _G.ReportsList = function(filter)
     filter = filter or 'open'
@@ -71,7 +66,6 @@ _G.ReportsSubmit = function(src, category, description, targetName, targetId)
         description,
     })
 
-    -- Notify on-duty admins so they see it immediately.
     local players = exports['corex-core']:GetPlayers() or {}
     for adminSrc in pairs(players) do
         local s = tonumber(adminSrc)
